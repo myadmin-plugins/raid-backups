@@ -12,7 +12,7 @@ use Symfony\Component\EventDispatcher\GenericEvent;
 class Plugin {
 
 	public static $name = 'Raid Plugin';
-	public static $description = 'Allows handling of Raid emails and honeypots';
+	public static $description = 'Allows handling of Raid based Backups';
 	public static $help = '';
 	public static $type = 'plugin';
 
