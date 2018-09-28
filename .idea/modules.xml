@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/myadmin-raid-backups.iml" filepath="$PROJECT_DIR$/.idea/myadmin-raid-backups.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/raid-backups.iml" filepath="$PROJECT_DIR$/.idea/raid-backups.iml" />
     </modules>
   </component>
 </project>

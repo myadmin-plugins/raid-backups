@@ -1,5 +1,5 @@
 {
-	"name": "detain/myadmin-raid-backups",
+	"name": "detain/raid-backups",
 	"type": "myadmin-plugin",
 	"description": "Raid handling plugin for MyAdmin",
 	"keywords": [
