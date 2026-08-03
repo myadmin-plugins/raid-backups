@@ -1,5 +1,6 @@
 composer.lock
 vendor/
+.phpunit.cache/
 .bettercodehub.yml
 .idea/workspace.xml
 .idea/libraries

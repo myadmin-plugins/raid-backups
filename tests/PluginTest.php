@@ -29,6 +29,11 @@ class PluginTest extends TestCase
      *
      * @return void
      */
+    public static function setUpBeforeClass(): void
+    {
+        require_once __DIR__.'/Stubs.php';
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -507,24 +512,109 @@ class PluginTest extends TestCase
     }
 
     // ---------------------------------------------------------------
-    // DB-code static analysis: getMenu references $GLOBALS
+    // getMenu behaviour: the admin role gate
     // ---------------------------------------------------------------
 
     /**
-     * Test that getMenu references $GLOBALS for the tf admin check.
+     * Test that getMenu only consults the ACL layer for an admin session.
      *
-     * This is a static analysis test verifying the code structure
-     * without executing the DB-dependent path.
+     * This replaces testGetMenuReferencesGlobals(), which asserted that the literal
+     * text "$GLOBALS['tf']->ima" appeared in the source. That pinned an implementation
+     * detail — which accessor reads the current role — rather than any behaviour, so it
+     * broke when the plugin migrated to \MyAdmin\App::ima() with the gate untouched, and
+     * it would have stayed green had the gate been deleted but the string left in a
+     * comment. Executing the handler asserts the gate itself: a client session must not
+     * reach the privileged ACL lookup at all.
      *
      * @covers ::getMenu
      * @return void
      */
-    public function testGetMenuReferencesGlobals(): void
+    public function testGetMenuDoesNotConsultAclForNonAdmin(): void
     {
-        $filename = $this->reflection->getFileName();
-        $this->assertNotFalse($filename);
-        $source = file_get_contents($filename);
-        $this->assertStringContainsString('$GLOBALS[\'tf\']->ima', $source);
+        FrameworkState::reset();
+        FrameworkState::$ima = 'client';
+        FrameworkState::$acls = ['client_billing' => true];
+        $menu = new RecordingMenu();
+
+        Plugin::getMenu(new GenericEvent($menu));
+
+        $this->assertSame(
+            [],
+            FrameworkState::$aclChecks,
+            'a client session must not reach the privileged ACL lookup'
+        );
+        $this->assertSame(
+            [],
+            FrameworkState::$requirements,
+            'a client session must not even lazy-load the ACL helper'
+        );
+        $this->assertSame([], $menu->entries, 'a client session must get no menu entries from this plugin');
+    }
+
+    /**
+     * Test that an admin session reaches the ACL lookup, and lazy-loads has_acl first.
+     *
+     * Loading the helper before calling it is load-bearing: has_acl() is not defined
+     * until function_requirements('has_acl') pulls it in, so getting that order wrong
+     * would fatal instead of denying.
+     *
+     * @covers ::getMenu
+     * @return void
+     */
+    public function testGetMenuConsultsBillingAclForAdminAfterLazyLoadingIt(): void
+    {
+        FrameworkState::reset();
+        FrameworkState::$ima = 'admin';
+        FrameworkState::$acls = ['client_billing' => true];
+        $menu = new RecordingMenu();
+
+        Plugin::getMenu(new GenericEvent($menu));
+
+        $this->assertSame(['has_acl'], FrameworkState::$requirements);
+        $this->assertSame(['client_billing'], FrameworkState::$aclChecks);
+    }
+
+    /**
+     * Test that getMenu contributes no menu entries even for a fully privileged admin.
+     *
+     * The body of the has_acl('client_billing') branch is currently empty, so this
+     * plugin adds nothing to the menu for anyone. Asserting that keeps the fact visible:
+     * if entries are ever added, this test must be updated deliberately rather than the
+     * addition slipping in unnoticed.
+     *
+     * @covers ::getMenu
+     * @return void
+     */
+    public function testGetMenuAddsNoEntriesEvenForPrivilegedAdmin(): void
+    {
+        FrameworkState::reset();
+        FrameworkState::$ima = 'admin';
+        FrameworkState::$acls = ['client_billing' => true];
+        $menu = new RecordingMenu();
+
+        Plugin::getMenu(new GenericEvent($menu));
+
+        $this->assertSame([], $menu->entries);
+    }
+
+    /**
+     * Test that getMenu is not wired to any event, so it never runs in production.
+     *
+     * Both of this plugin's registrations (system.settings and ui.menu) are commented
+     * out in getHooks(), which makes the whole plugin inert: nothing it declares is
+     * dispatched. That is why the getMenu behaviour above is unreachable at runtime.
+     *
+     * @covers ::getHooks
+     * @return void
+     */
+    public function testGetMenuIsNotWiredToAnyHook(): void
+    {
+        $callbacks = array_values(Plugin::getHooks());
+
+        $this->assertSame([], $callbacks, 'this plugin registers no listeners at all');
+        foreach ($callbacks as $callback) {
+            $this->assertNotSame('getMenu', is_array($callback) ? ($callback[1] ?? null) : null);
+        }
     }
 
     /**
