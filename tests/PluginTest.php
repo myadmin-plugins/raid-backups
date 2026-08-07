@@ -326,15 +326,30 @@ class PluginTest extends TestCase
     // ---------------------------------------------------------------
 
     /**
-     * Test that getRequirements calls add_requirement on the loader subject.
+     * Test that every source getRequirements() registers is a file that exists on disk.
      *
-     * Uses an anonymous class as a stub for the loader to avoid
-     * mocking vendor classes.
+     * This replaces testGetRequirementsRegistersExpectedPaths() and
+     * testGetRequirementsPathsReferenceVendorDirectory(), both of which have been
+     * deleted. Those tests only ever read the registration table back out and checked
+     * the names and the shape of the strings in it; neither one touched the filesystem.
+     * So they stayed green for years while all four registrations
+     * (class.Raid, deactivate_kcare, deactivate_abuse, get_abuse_licenses) pointed at
+     * src/Raid.php and src/abuse.inc.php -- files that have never existed in this
+     * package. They were a lock on the bug rather than a check on the behaviour, which
+     * is why they were removed instead of adjusted.
+     *
+     * function_requirements() resolves a registered source as INCLUDE_ROOT.'/'.$source
+     * and require_once's it, so a source with no file behind it is a fatal, not a
+     * miss. Asserting existence is therefore the property that actually matters.
+     *
+     * getRequirements() now registers nothing, so this passes vacuously -- that is the
+     * correct state for a package that ships only Plugin.php, and the test will start
+     * doing real work the moment a registration is added back.
      *
      * @covers ::getRequirements
      * @return void
      */
-    public function testGetRequirementsRegistersExpectedPaths(): void
+    public function testEveryRegisteredRequirementSourceExistsOnDisk(): void
     {
         $loader = new class {
             /** @var array<int, array{name: string, path: string}> */
@@ -354,48 +369,31 @@ class PluginTest extends TestCase
         $event = new GenericEvent($loader);
         Plugin::getRequirements($event);
 
-        $this->assertCount(4, $loader->requirements);
-
-        $names = array_column($loader->requirements, 'name');
-        $this->assertContains('class.Raid', $names);
-        $this->assertContains('deactivate_kcare', $names);
-        $this->assertContains('deactivate_abuse', $names);
-        $this->assertContains('get_abuse_licenses', $names);
-    }
-
-    /**
-     * Test that getRequirements registered paths reference the expected vendor directory.
-     *
-     * @covers ::getRequirements
-     * @return void
-     */
-    public function testGetRequirementsPathsReferenceVendorDirectory(): void
-    {
-        $loader = new class {
-            /** @var array<int, array{name: string, path: string}> */
-            public array $requirements = [];
-
-            /**
-             * @param string $name
-             * @param string $path
-             * @return void
-             */
-            public function add_requirement(string $name, string $path): void
-            {
-                $this->requirements[] = ['name' => $name, 'path' => $path];
-            }
-        };
-
-        $event = new GenericEvent($loader);
-        Plugin::getRequirements($event);
+        $packageRoot = dirname(__DIR__);
+        $marker = '/vendor/detain/myadmin-raid-backups';
+        $missing = [];
 
         foreach ($loader->requirements as $req) {
-            $this->assertStringContainsString(
-                'detain/myadmin-raid-backups/src/',
-                $req['path'],
-                "Requirement '{$req['name']}' should reference the package src directory"
-            );
+            $inPackage = strstr($req['path'], $marker);
+            if ($inPackage !== false) {
+                // Path points inside this package; resolve it against the checkout so
+                // the test works both installed under vendor/ and standalone.
+                $resolved = $packageRoot.substr($inPackage, strlen($marker));
+            } else {
+                // Anything else resolves the way function_requirements() does it.
+                $resolved = dirname($packageRoot, 3).'/include/'.$req['path'];
+            }
+
+            if (!is_file($resolved)) {
+                $missing[] = "{$req['name']} => {$req['path']} (looked for {$resolved})";
+            }
         }
+
+        $this->assertSame(
+            [],
+            $missing,
+            'every registered requirement source must resolve to a file that exists'
+        );
     }
 
     // ---------------------------------------------------------------

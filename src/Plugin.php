@@ -56,10 +56,6 @@ class Plugin
          * @var \MyAdmin\Plugins\Loader $this->loader
          */
         $loader = $event->getSubject();
-        $loader->add_requirement('class.Raid', '/../vendor/detain/myadmin-raid-backups/src/Raid.php');
-        $loader->add_requirement('deactivate_kcare', '/../vendor/detain/myadmin-raid-backups/src/abuse.inc.php');
-        $loader->add_requirement('deactivate_abuse', '/../vendor/detain/myadmin-raid-backups/src/abuse.inc.php');
-        $loader->add_requirement('get_abuse_licenses', '/../vendor/detain/myadmin-raid-backups/src/abuse.inc.php');
     }
 
     /**
